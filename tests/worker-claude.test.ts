@@ -3,7 +3,8 @@ import { EventEmitter } from 'node:events'
 import { existsSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { runClaude, CLAUDE_ARGS } from '../worker/claude.mjs'
+import { runClaude, CLAUDE_ARGS, DISALLOWED_TOOLS } from '../worker/claude.mjs'
+import { SYSTEM_PROMPT } from '../worker/prompt.mjs'
 
 type Call = { bin: string; args: string[]; opts: Record<string, unknown> }
 
@@ -72,6 +73,13 @@ describe('runClaude', () => {
     expect(args[t + 1]).toBe('')
     expect(args.join(' ')).not.toContain('TAJNY')
     expect(args).toEqual(CLAUDE_ARGS)
+    // bez ustawień/hooków/wtyczek użytkownika i z własnym promptem systemowym
+    const ss = args.indexOf('--setting-sources')
+    expect(ss).toBeGreaterThanOrEqual(0)
+    expect(args[ss + 1]).toBe('')
+    expect(args).toContain('--disable-slash-commands')
+    expect(args[args.indexOf('--system-prompt') + 1]).toBe(SYSTEM_PROMPT)
+    expect(DISALLOWED_TOOLS.split(' ')).toContain('mcp__*')
     expect(f.children[0].stdinData).toBe(PROMPT)
     expect(f.children[0].stdinEnded).toBe(true)
   })
@@ -127,6 +135,9 @@ describe('runClaude', () => {
       await vi.advanceTimersByTimeAsync(1001)
       await assertion
       expect(f.children[0].killed).toBe(true)
+      // katalog sprzątany dopiero po zamknięciu procesu
+      await vi.advanceTimersByTimeAsync(10)
+      expect(existsSync(f.calls[0].opts.cwd as string)).toBe(false)
     } finally {
       vi.useRealTimers()
     }

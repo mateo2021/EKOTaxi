@@ -11,6 +11,7 @@ const HEARTBEAT_POLL_MS = 10_000
 const ONLINE_WITHIN_MS = 30_000
 
 const ERROR_TEXT = 'Nie udało się odpowiedzieć — spróbuj ponownie.'
+const WAIT_TEXT = 'Poczekaj na odpowiedź na poprzednie pytanie'
 const SUGGESTIONS = [
   'Ile zapłacę za 10 km Comfortem?',
   'Czym różni się XL od Comfortu?',
@@ -37,6 +38,8 @@ export function ChatPanel() {
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [online, setOnline] = useState<Online>('unknown')
+  /** Id zalogowanego użytkownika (null = jeszcze nieznane / brak sesji). */
+  const [userId, setUserId] = useState<string | null>(null)
 
   const supabaseRef = useRef<ReturnType<typeof createBrowserSupabase> | null>(null)
   const userIdRef = useRef<string | null>(null)
@@ -68,6 +71,7 @@ export function ChatPanel() {
       const uid = auth.user?.id ?? null
       if (cancelled) return
       userIdRef.current = uid
+      setUserId(uid)
       if (!uid) {
         setLoadError('Sesja wygasła. Zaloguj się ponownie.')
         setLoading(false)
@@ -85,7 +89,8 @@ export function ChatPanel() {
       setLoading(false)
 
       channel = supabase
-        .channel(`chat-${uid}`)
+        // Unikalny temat przy każdym otwarciu: nie trafiamy na kanał, który jeszcze się zamyka.
+        .channel(`chat-${uid}-${Math.random().toString(36).slice(2, 10)}`)
         .on(
           'postgres_changes',
           { event: 'UPDATE', schema: 'public', table: 'chat_messages', filter: `user_id=eq.${uid}` },
@@ -164,6 +169,10 @@ export function ChatPanel() {
     const question = text.trim()
     const uid = userIdRef.current
     if (!question || question.length > MAX_QUESTION || sending || !uid) return
+    if (messagesRef.current.some((m) => m.status === 'pending')) {
+      setSendError(WAIT_TEXT)
+      return
+    }
     setSending(true)
     setSendError(null)
     const { data, error } = await client()
@@ -173,7 +182,10 @@ export function ChatPanel() {
       .single()
     setSending(false)
     if (error || !data) {
-      setSendError('Nie udało się wysłać pytania. Sprawdź internet i spróbuj ponownie.')
+      // 42501 = odrzucone przez RLS: jest już pytanie czekające na odpowiedź (migracja 0003).
+      setSendError(
+        error?.code === '42501' ? WAIT_TEXT : 'Nie udało się wysłać pytania. Sprawdź internet i spróbuj ponownie.',
+      )
       return
     }
     setDraft('')
@@ -193,7 +205,9 @@ export function ChatPanel() {
   }
 
   const remaining = MAX_QUESTION - draft.length
-  const canSend = draft.trim().length > 0 && !sending && !loadError
+  const hasPending = messages.some((m) => m.status === 'pending')
+  const ready = !!userId && !loading && !loadError
+  const canSend = draft.trim().length > 0 && !sending && ready && !hasPending
 
   return (
     <>
@@ -272,7 +286,7 @@ export function ChatPanel() {
                         <button
                           type="button"
                           onClick={() => void send(s)}
-                          disabled={sending}
+                          disabled={sending || !ready}
                           className="cursor-pointer rounded-full border border-border px-4 py-2 text-left text-sm transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
                         >
                           {s}
@@ -299,7 +313,7 @@ export function ChatPanel() {
                         </p>
                       ) : m.status === 'error' ? (
                         <p className="max-w-[85%] self-start rounded-[1.25rem] rounded-bl-md border border-danger/40 px-4 py-2.5 text-sm text-danger">
-                          {ERROR_TEXT}
+                          {m.answer || ERROR_TEXT}
                         </p>
                       ) : (
                         <p className="max-w-[85%] self-start whitespace-pre-wrap break-words rounded-[1.25rem] rounded-bl-md bg-bg px-4 py-2.5 text-sm leading-relaxed">
@@ -314,7 +328,11 @@ export function ChatPanel() {
             </div>
 
             <form onSubmit={onSubmit} className="border-t border-border px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
-              {sendError && <p className="mb-2 px-1 text-sm text-danger">{sendError}</p>}
+              {sendError ? (
+                <p className="mb-2 px-1 text-sm text-danger">{sendError}</p>
+              ) : (
+                hasPending && <p className="mb-2 px-1 text-sm text-muted">{WAIT_TEXT}.</p>
+              )}
               <div className="flex items-end gap-2 rounded-control border border-border bg-bg p-1.5 focus-within:border-accent">
                 <label htmlFor="chat-input" className="sr-only">
                   Twoje pytanie
@@ -323,7 +341,10 @@ export function ChatPanel() {
                   id="chat-input"
                   ref={inputRef}
                   value={draft}
-                  onChange={(e) => setDraft(e.target.value.slice(0, MAX_QUESTION))}
+                  onChange={(e) => {
+                    setDraft(e.target.value.slice(0, MAX_QUESTION))
+                    setSendError(null)
+                  }}
                   onKeyDown={onKeyDown}
                   maxLength={MAX_QUESTION}
                   rows={2}

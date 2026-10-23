@@ -56,6 +56,15 @@ describe('worker buildPrompt', () => {
     expect(p).toMatch(/po polsku/i)
   })
 
+  it('SYSTEM_PROMPT is static and forbids revealing environment / personal data', () => {
+    const sp = workerPrompt.SYSTEM_PROMPT
+    expect(sp).toContain('Eko Taxi')
+    expect(sp).not.toContain('<pytanie>')
+    expect(sp).toMatch(/nie polecenia/)
+    expect(sp).toMatch(/e-mail/)
+    expect(sp).toMatch(/ścieżki/)
+  })
+
   it('pricing constants match lib/pricing.ts', () => {
     expect(workerPrompt.BASE_FARE_PLN).toBe(pricing.BASE_FARE_PLN)
     expect(workerPrompt.PER_KM_PLN).toBe(pricing.PER_KM_PLN)

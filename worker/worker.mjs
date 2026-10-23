@@ -10,6 +10,9 @@ import { runClaude } from './claude.mjs'
 const ERROR_ANSWER = 'Nie udało się odpowiedzieć — spróbuj ponownie.'
 const MAX_ANSWER_CHARS = 2000
 const HEARTBEAT_MS = 10_000
+// Limit kosztów: ile pytań na użytkownika w ciągu godziny trafia do Claude.
+const HOURLY_LIMIT = 20
+const LIMIT_ANSWER = 'Limit pytań do asystenta (20 na godzinę) został wyczerpany — spróbuj ponownie później.'
 
 try {
   process.loadEnvFile(fileURLToPath(new URL('.env', import.meta.url)))
@@ -72,6 +75,23 @@ async function handle(/** @type {string} */ id) {
     if (error) throw new Error(`odczyt wiadomości: ${error.message}`)
     if (!msg || msg.status !== 'pending') return // już obsłużona (np. przez inny worker)
 
+    // Limit godzinowy: pytanie ponad limit od razu dostaje status error, bez wywołania Claude.
+    const hourAgo = new Date(Date.now() - 3600_000).toISOString()
+    const { count } = await supabase
+      .from('chat_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', msg.user_id)
+      .gte('created_at', hourAgo)
+    if ((count ?? 0) > HOURLY_LIMIT) {
+      await supabase
+        .from('chat_messages')
+        .update({ answer: LIMIT_ANSWER, status: 'error', answered_at: new Date().toISOString() })
+        .eq('id', id)
+        .eq('status', 'pending')
+      log(`${short} error (limit ${HOURLY_LIMIT}/h)`)
+      return
+    }
+
     const [{ data: profile }, { data: rides }] = await Promise.all([
       supabase.from('profiles').select('display_name').eq('id', msg.user_id).maybeSingle(),
       supabase
@@ -94,6 +114,15 @@ async function handle(/** @type {string} */ id) {
       answer = (await runClaude(prompt)).trim().slice(0, MAX_ANSWER_CHARS)
       if (!answer) throw new Error('pusta odpowiedź')
     } catch (e) {
+      // Ctrl+C w konsoli trafia też do claude.exe (ta sama grupa procesów), więc
+      // przerwane wywołanie kończy się błędem — czasem zanim Node obsłuży SIGINT.
+      // Chwila zwłoki, a jeśli worker się zatrzymuje, NIE zapisujemy 'error':
+      // pytanie zostaje 'pending' i obsłuży je następne uruchomienie workera.
+      await new Promise((r) => setTimeout(r, 300))
+      if (stopping) {
+        log(`${short} przerwane przy zatrzymaniu — zostaje pending`)
+        return
+      }
       status = 'error'
       answer = ERROR_ANSWER
       log(`${short} claude: ${e instanceof Error ? e.message : String(e)}`)
@@ -165,6 +194,8 @@ async function shutdown() {
   log('Zatrzymywanie…')
   clearInterval(heartbeatTimer)
   await supabase.removeChannel(channel).catch(() => {})
+  // Czekamy na bieżące pytanie (przy Ctrl+C claude.exe zwykle kończy się od razu,
+  // a pytanie zostaje pending — patrz handle()).
   if (current) await current
   process.exit(0)
 }
