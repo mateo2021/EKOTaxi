@@ -99,3 +99,164 @@ body {
     animation: none;
   }
 }
+
+/* ── Mapa przejazdu (components/map/RideMap.tsx) ─────────────────────────────
+ * Znaczniki powtarzają motyw z ekranu logowania: kółko = odbiór, kwadrat = cel.
+ * Kolory przez tokeny, więc oba motywy działają bez osobnych ikon.
+ */
+.eko-map {
+  background: var(--bg);
+  font-family: inherit;
+}
+
+.eko-map.is-picking {
+  cursor: crosshair;
+}
+
+/* Jasne kafelki OSM są krzykliwe — lekko je wyciszamy pod paletę aplikacji. */
+[data-theme="light"] .eko-map .leaflet-tile-pane {
+  filter: saturate(0.55) contrast(0.96) brightness(1.02);
+}
+
+/* Ciemny motyw: te same kafelki OSM odwrócone i przygaszone (bez zewnętrznego dostawcy). */
+[data-theme="dark"] .eko-map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.82) contrast(0.92) saturate(0.35);
+}
+
+.eko-map .leaflet-control-attribution {
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  color: var(--muted);
+  font-size: 10px;
+  border-bottom-left-radius: 6px;
+}
+
+.eko-map .leaflet-control-attribution a {
+  color: inherit;
+}
+
+.eko-map .leaflet-bar {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  overflow: hidden;
+  box-shadow: var(--shadow-sheet);
+}
+
+.eko-map .leaflet-bar a {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+  width: 36px;
+  height: 36px;
+  line-height: 36px;
+}
+
+.eko-map .leaflet-bar a:hover {
+  background: var(--bg);
+}
+
+/* Zoom tylko tam, gdzie nie ma gestów i panel go nie zasłania. */
+@media (max-width: 767px) {
+  .eko-map .leaflet-control-zoom {
+    display: none;
+  }
+}
+
+.eko-marker {
+  background: none;
+  border: 0;
+}
+
+.eko-pin-start,
+.eko-pin-end {
+  position: relative;
+  display: block;
+  width: 26px;
+  height: 26px;
+  box-shadow: 0 4px 10px -2px rgb(0 0 0 / 0.35);
+}
+
+.eko-pin-start {
+  border-radius: 9999px;
+  background: var(--surface);
+  border: 6px solid var(--accent);
+}
+
+.eko-pin-end {
+  border-radius: 6px;
+  background: var(--text);
+}
+
+.eko-pin-end::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 2px;
+  background: var(--surface);
+}
+
+/* Szukanie kierowcy: jedyny ciągły ruch na mapie — fala wokół punktu odbioru. */
+.eko-pin-start.is-searching::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 9999px;
+  border: 3px solid var(--accent);
+  animation: eko-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes eko-ping {
+  from {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  to {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+.eko-car {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  filter: drop-shadow(0 3px 4px rgb(0 0 0 / 0.35));
+}
+
+.eko-car-body {
+  fill: var(--accent);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.eko-car-glass {
+  fill: var(--text);
+  opacity: 0.78;
+}
+
+.eko-car-light {
+  fill: #fff6c2;
+}
+
+.eko-route-casing {
+  stroke: var(--surface);
+  stroke-linecap: round;
+}
+
+.eko-route {
+  stroke: var(--accent);
+  stroke-linecap: round;
+}
+
+.eko-route-done {
+  stroke: var(--muted);
+  stroke-linecap: round;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eko-pin-start.is-searching::before {
+    animation: none;
+    opacity: 0.35;
+    transform: scale(1.6);
+  }
+}
