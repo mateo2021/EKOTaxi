@@ -9,7 +9,9 @@ export const CLASS_MULTIPLIER = { economy: 1.0, comfort: 1.3, xl: 1.6 }
 
 export const MAX_RIDES = 5
 
-const CLASS_LABEL = { economy: 'Economy', comfort: 'Comfort', xl: 'XL' }
+// Nazwy i opisy klas jak w aplikacji (lib/ride-ui.ts, CLASS_INFO).
+const CLASS_LABEL = { economy: 'Ekonomiczna (Economy)', comfort: 'Komfort (Comfort)', xl: 'XL' }
+const CLASS_HINT = { economy: 'do 4 osób, najtaniej', comfort: 'nowsze auto, więcej miejsca', xl: 'do 6 osób i bagaż' }
 const STATUS_LABEL = {
   searching: 'szukanie kierowcy',
   accepted: 'kierowca w drodze',
@@ -68,6 +70,7 @@ export function buildPrompt({ question, rides, displayName }) {
     `- opłata startowa: ${BASE_FARE_PLN} zł`,
     `- stawka za kilometr: ${PER_KM_PLN} zł/km`,
     `- cena minimalna kursu: ${MIN_FARE_PLN} zł`,
+    `- klasy aut: ${Object.keys(CLASS_HINT).map((k) => `${CLASS_LABEL[/** @type {keyof typeof CLASS_LABEL} */ (k)]} — ${CLASS_HINT[/** @type {keyof typeof CLASS_HINT} */ (k)]}`).join('; ')}`,
     `- mnożniki klas: Economy × ${m.economy.toFixed(1)}, Comfort × ${m.comfort}, XL × ${m.xl}`,
     `- wzór: cena = max(${MIN_FARE_PLN} zł, zaokrąglenie do pełnych złotych z ((${BASE_FARE_PLN} zł + ${PER_KM_PLN} zł/km × dystans) × mnożnik klasy)); połówki zaokrąglamy w górę`,
     `- dystans w aplikacji to odległość w linii prostej × ${ROUTE_FACTOR} (przybliżenie trasy po ulicach)`,

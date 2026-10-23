@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { signOut } from '@/app/(auth)/actions'
+import { ChatPanel } from '@/components/chat/ChatPanel'
 
 const links = [
   { href: '/', label: 'Mapa' },
@@ -30,7 +31,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               {l.label}
             </Link>
           ))}
-          {/* Miejsce na przycisk czatu (dodaje go późniejsze zadanie). */}
+          <ChatPanel />
           <form action={signOut} className="flex flex-1 md:ml-auto md:flex-none">
             <button type="submit" className={`${itemClass} w-full cursor-pointer`}>
               Wyloguj
