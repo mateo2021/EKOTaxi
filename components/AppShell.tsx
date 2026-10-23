@@ -38,7 +38,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </form>
         </nav>
       </header>
-      <div className="flex-1 pb-20 md:pb-0">{children}</div>
+      <div className="flex flex-1 flex-col pb-20 md:pb-0">{children}</div>
     </div>
   )
 }
