@@ -149,6 +149,7 @@ export function AddressInput({
           onChange={(e) => onType(e.currentTarget.value)}
           onKeyDown={onKeyDown}
           onFocus={() => {
+            if (blurTimer.current) clearTimeout(blurTimer.current)
             onTarget()
             if (query !== null) setOpen(true)
           }}

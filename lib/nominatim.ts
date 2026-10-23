@@ -19,6 +19,52 @@ const MAX_ADDRESS = 200
 
 type Fetch = typeof fetch
 
+/** Najmniejszy odstęp między startami zapytań do Nominatim (polityka: max 1 req/s). */
+export const MIN_INTERVAL_MS = 1000
+
+export interface RateGate {
+  /** Czeka na swoją kolej (kolejka, nic nie jest odrzucane); odrzuca po abort. */
+  wait(signal?: AbortSignal): Promise<void>
+}
+
+function abortReason(signal?: AbortSignal): unknown {
+  return signal?.reason ?? new DOMException('Aborted', 'AbortError')
+}
+
+/**
+ * Bramka rezerwująca kolejne „okna” co `intervalMs`. Każde wywołanie dostaje najbliższe
+ * wolne okno i czeka do niego. Przerwane czekanie zwalnia okno, jeśli było ostatnie.
+ */
+export function createRateGate(intervalMs = MIN_INTERVAL_MS): RateGate {
+  let next = 0
+  return {
+    wait(signal) {
+      if (signal?.aborted) return Promise.reject(abortReason(signal))
+      const now = Date.now()
+      const start = Math.max(now, next)
+      const prev = next
+      next = start + intervalMs
+      const delay = start - now
+      if (delay <= 0) return Promise.resolve()
+      return new Promise<void>((resolve, reject) => {
+        const onAbort = () => {
+          clearTimeout(timer)
+          if (next === start + intervalMs) next = prev
+          reject(abortReason(signal))
+        }
+        const timer = setTimeout(() => {
+          signal?.removeEventListener('abort', onAbort)
+          resolve()
+        }, delay)
+        signal?.addEventListener('abort', onAbort, { once: true })
+      })
+    },
+  }
+}
+
+/** Wspólna bramka dla wyszukiwania i odwrotnego geokodowania w całej karcie. */
+const sharedGate = createRateGate()
+
 interface NominatimAddress {
   road?: string
   pedestrian?: string
@@ -109,6 +155,7 @@ export async function searchAddress(
   q: string,
   signal?: AbortSignal,
   fetchImpl: Fetch = fetch,
+  gate: RateGate = sharedGate,
 ): Promise<GeoPlace[]> {
   const query = q.trim()
   if (query.length < MIN_QUERY_LENGTH) return []
@@ -120,6 +167,7 @@ export async function searchAddress(
     'accept-language': 'pl',
     q: query,
   })
+  await gate.wait(signal)
   const res = await fetchImpl(`${BASE}/search?${params}`, { signal })
   if (!res.ok) throw new Error(`Nominatim ${res.status}`)
   return mapSearchResults(await res.json())
@@ -131,6 +179,7 @@ export async function reverseGeocode(
   lng: number,
   signal?: AbortSignal,
   fetchImpl: Fetch = fetch,
+  gate: RateGate = sharedGate,
 ): Promise<string> {
   const params = new URLSearchParams({
     format: 'jsonv2',
@@ -141,6 +190,7 @@ export async function reverseGeocode(
     'accept-language': 'pl',
   })
   try {
+    await gate.wait(signal)
     const res = await fetchImpl(`${BASE}/reverse?${params}`, { signal })
     if (!res.ok) return formatLatLng(lat, lng)
     const place = toGeoPlace((await res.json()) as NominatimItem)

@@ -13,6 +13,8 @@ export interface RideSnapshot {
 }
 
 export const POLL_MS = 3_000
+/** Zawieszone zapytanie przerywamy, żeby nie blokowało kolejnych. */
+export const POLL_TIMEOUT_MS = 8_000
 
 async function readError(res: Response, fallback: string): Promise<string> {
   try {
@@ -32,24 +34,43 @@ export function useRidePolling(initial: RideSnapshot | null) {
   const [offline, setOffline] = useState(false)
   const rideId = snapshot?.ride.id ?? null
   const terminal = snapshot ? isTerminal(snapshot.ride.status) : true
-  const inFlight = useRef(false)
+  /** Trwające zapytanie (null = brak); jedno naraz. */
+  const inFlight = useRef<AbortController | null>(null)
 
   const refresh = useCallback(async () => {
     if (!rideId || inFlight.current) return
-    inFlight.current = true
+    const ctrl = new AbortController()
+    inFlight.current = ctrl
+    const timeout = setTimeout(() => ctrl.abort(), POLL_TIMEOUT_MS)
     try {
-      const res = await fetch(`/api/rides/${rideId}`, { cache: 'no-store' })
+      const res = await fetch(`/api/rides/${rideId}`, { cache: 'no-store', signal: ctrl.signal })
       if (!res.ok) throw new Error(String(res.status))
       const next = (await res.json()) as RideSnapshot
-      // Odpowiedź dla starego kursu (po resecie) ignorujemy.
-      setSnapshot((cur) => (cur && cur.ride.id === next.ride.id ? next : cur))
+      setSnapshot((cur) => {
+        // Odpowiedź dla starego kursu (po resecie) ignorujemy.
+        if (!cur || cur.ride.id !== next.ride.id) return cur
+        // Spóźniona odpowiedź nie cofa zakończonego/anulowanego kursu.
+        if (isTerminal(cur.ride.status) && !isTerminal(next.ride.status)) return cur
+        return next
+      })
       setOffline(false)
     } catch {
-      setOffline(true)
+      // Przerwanie przy sprzątaniu efektu to nie brak sieci.
+      if (inFlight.current === ctrl) setOffline(true)
     } finally {
-      inFlight.current = false
+      clearTimeout(timeout)
+      if (inFlight.current === ctrl) inFlight.current = null
     }
   }, [rideId])
+
+  // Zmiana kursu / odmontowanie: przerwij trwające zapytanie i zwolnij blokadę.
+  useEffect(
+    () => () => {
+      inFlight.current?.abort()
+      inFlight.current = null
+    },
+    [rideId],
+  )
 
   useEffect(() => {
     if (!rideId || terminal) return
