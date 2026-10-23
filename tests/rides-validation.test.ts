@@ -6,7 +6,8 @@ import {
   isUuid,
   parseCreateRideBody,
   rideProgress,
-  wantsNotification,
+  canSendNotification,
+  needsNotificationClaim,
 } from '@/lib/rides-validation'
 
 const valid = {
@@ -96,13 +97,20 @@ describe('pomocnicze', () => {
     expect(canCancel('cancelled')).toBe(false)
   })
 
-  it('wantsNotification: nigdy o searching, raz o każdym statusie, szanuje preferencję', () => {
-    expect(wantsNotification('searching', null, true)).toBe(false)
-    expect(wantsNotification('accepted', null, true)).toBe(true)
-    expect(wantsNotification('accepted', 'accepted', true)).toBe(false)
-    expect(wantsNotification('completed', 'accepted', true)).toBe(true)
-    expect(wantsNotification('cancelled', null, true)).toBe(true)
-    expect(wantsNotification('completed', 'accepted', false)).toBe(false)
+  it('needsNotificationClaim: nigdy o searching, raz o każdym statusie', () => {
+    expect(needsNotificationClaim('searching', null)).toBe(false)
+    expect(needsNotificationClaim('accepted', null)).toBe(true)
+    expect(needsNotificationClaim('accepted', 'accepted')).toBe(false)
+    expect(needsNotificationClaim('completed', 'accepted')).toBe(true)
+    expect(needsNotificationClaim('cancelled', null)).toBe(true)
+  })
+
+  it('canSendNotification: preferencja + webhook; brak profilu = włączone', () => {
+    const hook = 'https://discord.com/api/webhooks/1/x'
+    expect(canSendNotification(true, hook)).toBe(true)
+    expect(canSendNotification(undefined, hook)).toBe(true)
+    expect(canSendNotification(false, hook)).toBe(false)
+    expect(canSendNotification(true, null)).toBe(false)
   })
 
   it('rideProgress', () => {

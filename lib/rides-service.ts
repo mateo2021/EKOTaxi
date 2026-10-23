@@ -12,7 +12,8 @@ import {
   canCancel,
   isActiveStatus,
   isUuid,
-  wantsNotification,
+  canSendNotification,
+  needsNotificationClaim,
   type CreateRideInput,
 } from '@/lib/rides-validation'
 import type { Driver, Ride, RideStatus } from '@/lib/types'
@@ -21,6 +22,8 @@ type Admin = ReturnType<typeof createAdminSupabase>
 
 /** Ile razy ponawiamy po przegranym wyścigu warunkowego UPDATE. */
 const MAX_ATTEMPTS = 3
+const UNIQUE_VIOLATION = '23505'
+const ACTIVE_RIDE_CONFLICT = 'Masz już aktywny kurs'
 
 export class RideNotFoundError extends Error {
   constructor() {
@@ -104,44 +107,49 @@ async function syncStatus(admin: Admin, ride: Ride, userId: string, now: Date): 
 
 /**
  * Powiadomienie o BIEŻĄCYM statusie (przy przeskoku kilku statusów — tylko o ostatnim).
- * Dokładnie raz: claim to warunkowy UPDATE `last_notified_status`, wysyłamy tylko
- * gdy zmienił dokładnie 1 wiersz. Wysyłka po odpowiedzi (`after`), błąd tylko logowany.
+ * Dokładnie raz: claim to warunkowy UPDATE `last_notified_status`, robiony przy KAŻDEJ
+ * zmianie statusu (także gdy powiadomienia wyłączone / brak webhooka). Wysyłamy tylko
+ * gdy claim zmienił dokładnie 1 wiersz i `canSendNotification`. Wysyłka po odpowiedzi
+ * (`after`). Żaden błąd tej ścieżki nie psuje odpowiedzi — tylko log.
  */
 async function maybeNotify(admin: Admin, ride: Ride, userId: string): Promise<Ride> {
-  // Tani filtr przed odczytem profilu.
-  if (!wantsNotification(ride.status, ride.last_notified_status, true)) return ride
+  if (!needsNotificationClaim(ride.status, ride.last_notified_status)) return ride
+  let result = ride
+  try {
+    const prev = ride.last_notified_status
+    let claim = admin
+      .from('rides')
+      .update({ last_notified_status: ride.status })
+      .eq('id', ride.id)
+      .eq('user_id', userId)
+      .eq('status', ride.status)
+    claim = prev === null ? claim.is('last_notified_status', null) : claim.eq('last_notified_status', prev)
+    const { data: claimed, error: claimError } = await claim.select('id')
+    if (claimError) throw claimError
+    if (!claimed || claimed.length !== 1) return ride // ktoś inny już zaklepał ten status
+    result = { ...ride, last_notified_status: ride.status }
 
-  const { data: profile, error: profileError } = await admin
-    .from('profiles')
-    .select('notify_ride_status, discord_webhook_url')
-    .eq('id', userId)
-    .maybeSingle()
-  if (profileError) throw profileError
-  const notifyEnabled = (profile?.notify_ride_status as boolean | undefined) ?? true
-  if (!wantsNotification(ride.status, ride.last_notified_status, notifyEnabled)) return ride
-  const webhook = resolveWebhook((profile?.discord_webhook_url as string | null | undefined) ?? null)
-  if (!webhook) return ride
+    const { data: profile, error: profileError } = await admin
+      .from('profiles')
+      .select('notify_ride_status, discord_webhook_url')
+      .eq('id', userId)
+      .maybeSingle()
+    if (profileError) throw profileError
+    const webhook = resolveWebhook((profile?.discord_webhook_url as string | null | undefined) ?? null)
+    if (!canSendNotification(profile?.notify_ride_status as boolean | undefined, webhook)) return result
 
-  const prev = ride.last_notified_status
-  let claim = admin
-    .from('rides')
-    .update({ last_notified_status: ride.status })
-    .eq('id', ride.id)
-    .eq('status', ride.status)
-  claim = prev === null ? claim.is('last_notified_status', null) : claim.eq('last_notified_status', prev)
-  const { data: claimed, error: claimError } = await claim.select('id')
-  if (claimError) throw claimError
-  if (!claimed || claimed.length !== 1) return ride // ktoś inny już powiadomił
-
-  const driver = await loadDriver(admin, ride.driver_id)
-  const content = rideStatusMessage(ride.status, driver, ride)
-  const rideId = ride.id
-  const status = ride.status
-  after(async () => {
-    const ok = await sendDiscord(webhook, content)
-    if (!ok) console.warn(`[rides] Discord: nie wysłano powiadomienia ${status} dla kursu ${rideId}`)
-  })
-  return { ...ride, last_notified_status: ride.status }
+    const driver = await loadDriver(admin, ride.driver_id)
+    const content = rideStatusMessage(ride.status, driver, ride)
+    const rideId = ride.id
+    const status = ride.status
+    after(async () => {
+      const ok = await sendDiscord(webhook, content)
+      if (!ok) console.warn(`[rides] Discord: nie wysłano powiadomienia ${status} dla kursu ${rideId}`)
+    })
+  } catch (e) {
+    console.error(`[rides] powiadomienie dla kursu ${ride.id} nie powiodło się`, e)
+  }
+  return result
 }
 
 /** Odczyt kursu z wyliczeniem statusu z upływu czasu + ewentualne powiadomienie. */
@@ -181,7 +189,7 @@ export async function findActiveRide(
 
 export async function createRide(userId: string, input: CreateRideInput, now: Date): Promise<Ride> {
   if (await findActiveRide(userId, now)) {
-    throw new RideConflictError('Masz już aktywny kurs')
+    throw new RideConflictError(ACTIVE_RIDE_CONFLICT)
   }
   const distanceKm = estimateDistanceKm(input.pickup, input.dropoff)
   const admin = createAdminSupabase()
@@ -203,7 +211,11 @@ export async function createRide(userId: string, input: CreateRideInput, now: Da
     })
     .select('*')
     .single()
-  if (error) throw error
+  if (error) {
+    // 23505 = unique_violation na rides_one_active_per_user (równoległy POST).
+    if (error.code === UNIQUE_VIOLATION) throw new RideConflictError(ACTIVE_RIDE_CONFLICT)
+    throw error
+  }
   return data as Ride
 }
 

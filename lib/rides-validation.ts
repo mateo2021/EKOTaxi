@@ -72,15 +72,21 @@ export function canCancel(s: RideStatus): boolean {
 }
 
 /**
- * Czy wysłać powiadomienie o bieżącym statusie. `searching` jest stanem
- * początkowym, nie zmianą — nie powiadamiamy o nim.
+ * Czy bieżący status trzeba „zaklepać” w `last_notified_status`. Claim następuje
+ * zawsze przy zmianie statusu — niezależnie od preferencji i webhooka — żeby po
+ * późniejszym włączeniu powiadomień nie przyszły stare statusy. `searching` jest
+ * stanem początkowym, nie zmianą — pomijamy go.
  */
-export function wantsNotification(
-  status: RideStatus,
-  lastNotified: RideStatus | null,
-  notifyEnabled: boolean,
-): boolean {
-  return status !== 'searching' && shouldNotify(status, lastNotified, notifyEnabled)
+export function needsNotificationClaim(status: RideStatus, lastNotified: RideStatus | null): boolean {
+  return status !== 'searching' && shouldNotify(status, lastNotified, true)
+}
+
+/** Czy po udanym claimie faktycznie wysłać wiadomość na Discord. */
+export function canSendNotification(
+  notifyEnabled: boolean | null | undefined,
+  webhook: string | null,
+): webhook is string {
+  return (notifyEnabled ?? true) && webhook !== null
 }
 
 /** Postęp trasy 0..1 do paska na mapie. */

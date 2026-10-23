@@ -39,7 +39,7 @@ describe('sendDiscord', () => {
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe(GOOD)
     expect(init.method).toBe('POST')
-    expect(JSON.parse(init.body)).toEqual({ content: 'hej' })
+    expect(JSON.parse(init.body)).toEqual({ content: 'hej', allowed_mentions: { parse: [] } })
   })
   it('returns false on 500', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }))

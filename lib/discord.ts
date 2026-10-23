@@ -22,7 +22,11 @@ export async function sendDiscord(webhookUrl: string, content: string): Promise<
     const res = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: content.slice(0, MAX_CONTENT) }),
+      body: JSON.stringify({
+        content: content.slice(0, MAX_CONTENT),
+        // Adresy wpisuje użytkownik — nie pozwalamy na @everyone / @here / pingi.
+        allowed_mentions: { parse: [] },
+      }),
       signal: AbortSignal.timeout(5000),
     })
     return res.ok
