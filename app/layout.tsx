@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Onest, Unbounded } from "next/font/google";
 import "./globals.css";
+import { ThemeSync } from "@/components/ThemeSync";
+import { getProfile } from "@/app/settings/actions";
 
 const onest = Onest({
   variable: "--font-onest",
@@ -17,15 +19,19 @@ export const metadata: Metadata = {
   description: "Eko Taxi — zamów przejazd",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // Motyw z profilu (serwerowo, bez migania); domyślnie jasny.
+  const theme = (await getProfile())?.theme ?? "light";
   return (
-    // Motyw na sztywno; późniejsze zadanie czyta go z profilu użytkownika.
     <html
       lang="pl"
-      data-theme="light"
+      data-theme={theme}
       className={`${onest.variable} ${unbounded.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <ThemeSync theme={theme} />
+        {children}
+      </body>
     </html>
   );
 }
