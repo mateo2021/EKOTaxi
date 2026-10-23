@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState } from 'react'
+import { useActionState, useEffect, useRef, useState } from 'react'
 import { sendTestNotification, updateProfile, type SettingsState } from './actions'
 import type { Profile } from '@/lib/types'
 
@@ -25,6 +25,21 @@ const classes = [
 export function SettingsForm({ profile }: { profile: Profile }) {
   const [saved, save, saving] = useActionState(updateProfile, initial)
   const [tested, test, testing] = useActionState(sendTestNotification, initial)
+  const [webhook, setWebhook] = useState(profile.discord_webhook_url ?? '')
+  const savedTheme = useRef(profile.theme)
+
+  useEffect(() => {
+    savedTheme.current = profile.theme
+  }, [profile.theme])
+
+  // Niezapisany podgląd motywu cofa się po wyjściu z ustawień.
+  useEffect(() => {
+    return () => {
+      document.documentElement.dataset.theme = savedTheme.current
+    }
+  }, [])
+
+  const webhookUnsaved = webhook.trim() !== (profile.discord_webhook_url ?? '')
 
   return (
     <form action={save} className="flex flex-col gap-8" noValidate>
@@ -52,7 +67,7 @@ export function SettingsForm({ profile }: { profile: Profile }) {
                 defaultChecked={profile.theme === t.value}
                 className="sr-only"
                 onChange={(e) => {
-                  // Podgląd od razu; zapis następuje po „Zapisz zmiany”.
+                  // Podgląd od razu; bez zapisu wraca przy wyjściu z ustawień.
                   document.documentElement.dataset.theme = e.currentTarget.value
                 }}
               />
@@ -109,13 +124,17 @@ export function SettingsForm({ profile }: { profile: Profile }) {
           type="url"
           inputMode="url"
           maxLength={300}
-          defaultValue={profile.discord_webhook_url ?? ''}
+          value={webhook}
+          onChange={(e) => setWebhook(e.target.value)}
           placeholder="https://discord.com/api/webhooks/…"
           className={inputClass}
         />
         <span className="text-sm text-muted">
           Tu wyślemy powiadomienia. Bez niego użyjemy domyślnego kanału, jeśli jest ustawiony.
         </span>
+        {webhookUnsaved && (
+          <span className="text-sm text-muted">Zapisz ustawienia, aby przetestować nowy webhook</span>
+        )}
       </label>
 
       <div aria-live="polite" className="flex flex-col gap-1 text-sm">
@@ -144,6 +163,7 @@ export function SettingsForm({ profile }: { profile: Profile }) {
         <button
           type="submit"
           formAction={test}
+          formNoValidate
           disabled={testing}
           className="min-h-12 flex-1 cursor-pointer rounded-control border border-border bg-surface px-5 font-medium disabled:opacity-60"
         >

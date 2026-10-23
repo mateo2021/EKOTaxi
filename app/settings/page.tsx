@@ -1,14 +1,19 @@
 import { redirect } from 'next/navigation'
 import { AppShell } from '@/components/AppShell'
 import { isSupabaseConfigured } from '@/lib/supabase/env'
-import { getProfile } from './actions'
+import { getSession } from '@/lib/profile-server'
 import { SettingsForm } from './settings-form'
 
 export const metadata = { title: 'Ustawienia — Eko Taxi' }
 
 export default async function SettingsPage() {
-  const profile = await getProfile()
-  if (!profile && isSupabaseConfigured()) redirect('/login')
+  const { userId, profile } = await getSession()
+  // Do /login tylko bez sesji; z sesją, ale bez profilu, (auth) odsyłałoby z powrotem.
+  if (!userId && isSupabaseConfigured()) redirect('/login')
+
+  const notice = !isSupabaseConfigured()
+    ? 'Ustawienia będą dostępne po skonfigurowaniu Supabase i zalogowaniu.'
+    : 'Nie znaleziono Twojego profilu. Wyloguj się i zaloguj ponownie albo skontaktuj się z administratorem.'
 
   return (
     <AppShell>
@@ -17,9 +22,7 @@ export default async function SettingsPage() {
         {profile ? (
           <SettingsForm profile={profile} />
         ) : (
-          <p className="rounded-control border border-border bg-surface p-4 text-muted">
-            Ustawienia będą dostępne po skonfigurowaniu Supabase i zalogowaniu.
-          </p>
+          <p className="rounded-control border border-border bg-surface p-4 text-muted">{notice}</p>
         )}
       </main>
     </AppShell>

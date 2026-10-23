@@ -6,7 +6,8 @@ import type { Theme } from '@/lib/types'
 /**
  * Serwer ustawia data-theme na <html> (bez migania). Po zapisaniu ustawień
  * revalidatePath odświeża layout; ten komponent tylko pilnuje, by atrybut
- * zawsze zgadzał się z profilem (także po podglądzie niezapisanego wyboru).
+ * zgadzał się z profilem po każdej zmianie motywu w profilu. Cofnięcie niezapisanego
+ * podglądu robi formularz ustawień przy odmontowaniu.
  */
 export function ThemeSync({ theme }: { theme: Theme }) {
   useEffect(() => {

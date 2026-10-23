@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Onest, Unbounded } from "next/font/google";
 import "./globals.css";
 import { ThemeSync } from "@/components/ThemeSync";
-import { getProfile } from "@/app/settings/actions";
+import { getProfile } from "@/lib/profile-server";
 
 const onest = Onest({
   variable: "--font-onest",
