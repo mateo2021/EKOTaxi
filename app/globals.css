@@ -1,26 +1,101 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * Eko Taxi — system wizualny (tokeny). Używaj ich zamiast surowych kolorów.
+ *
+ * Motyw przełącza atrybut data-theme="light|dark" na <html>.
+ * Każdy token jest zmienną CSS (--…) i klasą Tailwinda (przez @theme):
+ *
+ *   --bg              tło aplikacji / „papier mapy”       bg-bg
+ *   --surface         panele, arkusze, karty, pola         bg-surface
+ *   --text            tekst główny                         text-text
+ *   --muted           tekst pomocniczy, ikony              text-muted
+ *   --accent          zieleń marki: CTA, trasa, focus      bg-accent / text-accent
+ *   --accent-contrast tekst na tle --accent                text-accent-contrast
+ *   --border          obramowania, linie ulic na mapie     border-border
+ *   --danger          błędy, akcje destrukcyjne            text-danger
+ *   --radius-sheet    górne rogi arkusza / panelu          rounded-sheet
+ *   --radius-control  przyciski, pola formularzy           rounded-control
+ *   --shadow-sheet    cień arkusza unoszącego się nad mapą shadow-sheet
+ *
+ * Fonty (next/font w app/layout.tsx):
+ *   font-display  Unbounded — logo i nagłówki (szeroki, „karoseria”)
+ *   font-sans     Onest     — cały tekst interfejsu (domyślny na <body>)
+ *
+ * Układ: mapa na całym ekranie, treść w arkuszu (mobile: od dołu,
+ * desktop: pływający panel po lewej). Patrz app/(auth)/layout.tsx.
+ */
+
+[data-theme="light"] {
+  --bg: #eef2ee;
+  --surface: #ffffff;
+  --text: #10231a;
+  --muted: #587064;
+  --accent: #16a05a;
+  --accent-contrast: #ffffff;
+  --border: #d5dfd8;
+  --danger: #c53a2e;
+  --shadow-sheet: 0 -2px 0 rgb(16 35 26 / 0.04), 0 18px 48px -12px rgb(16 35 26 / 0.28);
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --bg: #0d1612;
+  --surface: #15211b;
+  --text: #e4eee8;
+  --muted: #8fa398;
+  --accent: #34c77b;
+  --accent-contrast: #04170d;
+  --border: #24352c;
+  --danger: #f0786c;
+  --shadow-sheet: 0 -1px 0 rgb(255 255 255 / 0.04), 0 18px 48px -12px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-border: var(--border);
+  --color-danger: var(--danger);
+  --radius-sheet: 1.75rem;
+  --radius-control: 0.875rem;
+  --shadow-sheet: var(--shadow-sheet);
+  --font-sans: var(--font-onest);
+  --font-display: var(--font-unbounded);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-onest), system-ui, sans-serif;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Jedyny ruch na ekranie: trasa rysuje się raz po wejściu. */
+@keyframes route-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.route-draw {
+  stroke-dasharray: 1;
+  animation: route-draw 1.6s cubic-bezier(0.65, 0, 0.35, 1) 0.2s both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-draw {
+    animation: none;
+  }
 }
